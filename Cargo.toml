@@ -1,0 +1,8 @@
+[package]
+name = "addrkit"
+version = "0.1.0"
+edition = "2021"
+description = "A validating parser and pretty printer for US postal addresses"
+license = "MIT"
+
+[dependencies]
