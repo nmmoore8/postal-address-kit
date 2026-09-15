@@ -24,6 +24,12 @@ library trivial to unit test, which is the point.
 Anything that fails one of these comes back as a `ParseError` describing
 which part was wrong, not a generic "invalid address."
 
+An apartment, suite, or similar unit is pulled into its own `unit` field
+instead of staying stuck to the street. It's recognized whether it's folded
+into the street text (`"123 Main St Apt 4B"`), given its own comma segment
+(`"123 Main St, Apt 4B, Springfield, IL 62704"`), or written as a bare
+`#4B`. Addresses with no unit leave the field `None`.
+
 ## Usage
 
 ```rust
@@ -50,6 +56,7 @@ fn main() {
     // two-line form regardless of how the address was originally written.
     let built = Address {
         street: "1600 Pennsylvania Ave NW".to_string(),
+        unit: None,
         city: "Washington".to_string(),
         state: "DC".to_string(),
         postal_code: "20500".to_string(),
@@ -62,10 +69,10 @@ fn main() {
 
 ## Status
 
-Early skeleton. Handles standard single-address US mail formatting; it does
-not yet handle apartment/suite lines as a separate field, PO boxes, or
-non-US addresses. See the code for the current field-by-field validation
-rules.
+Early skeleton. Handles standard single-address US mail formatting,
+including apartment/suite units as a separate field; it does not yet
+recognize PO box street lines or non-US addresses. See the code for the
+current field-by-field validation rules.
 
 ## Building
 
