@@ -30,6 +30,12 @@ into the street text (`"123 Main St Apt 4B"`), given its own comma segment
 (`"123 Main St, Apt 4B, Springfield, IL 62704"`), or written as a bare
 `#4B`. Addresses with no unit leave the field `None`.
 
+A PO box street line is recognized under any of the ways people write it -
+`"PO Box 123"`, `"P.O. Box 123"`, `"P O Box 123"`, `"Post Office Box 123"`,
+`"POB 123"`, or plain `"Box 123"` - and normalized to `"PO Box 123"` in
+`street`. Call `is_po_box` on a street to tell a box apart from a regular
+street address.
+
 ## Usage
 
 ```rust
@@ -70,9 +76,9 @@ fn main() {
 ## Status
 
 Early skeleton. Handles standard single-address US mail formatting,
-including apartment/suite units as a separate field; it does not yet
-recognize PO box street lines or non-US addresses. See the code for the
-current field-by-field validation rules.
+including apartment/suite units and PO box lines as a separate field; it
+does not yet cross-check zip codes against states or handle non-US
+addresses. See the code for the current field-by-field validation rules.
 
 ## Building
 

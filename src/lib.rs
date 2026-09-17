@@ -19,7 +19,9 @@ use std::fmt;
 /// (`"62704"` or `"62704-1234"`) rather than forcing one shape.
 /// `unit` holds an apartment, suite, or similar sub-unit designator
 /// (`"Apt 4B"`, `"Suite 200"`) separately from `street` so callers can
-/// lay the two out however they need.
+/// lay the two out however they need. A PO box line ends up in `street`
+/// too, normalized to `"PO Box <number>"`; use [`is_po_box`] to tell the
+/// two apart.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Address {
     pub street: String,
@@ -95,7 +97,11 @@ pub fn parse_address(input: &str) -> Result<Address, ParseError> {
         return Err(ParseError::MissingStreet);
     }
 
-    let (street, embedded_unit) = extract_unit(raw_street.trim());
+    let trimmed_street = raw_street.trim();
+    let (street, embedded_unit) = match normalize_po_box(trimmed_street) {
+        Some(po_box) => (po_box, None),
+        None => extract_unit(trimmed_street),
+    };
     let unit = comma_unit.or(embedded_unit);
 
     let (city, state, postal_code) = split_city_state_zip(&tail)?;
@@ -175,6 +181,53 @@ fn extract_unit(street: &str) -> (String, Option<String>) {
         }
     }
     (street.to_string(), None)
+}
+
+/// Prefixes people write before a PO box number, checked longest/most
+/// specific first so "PO Box" doesn't get short-circuited by the bare
+/// "box" fallback. Each token has already had periods stripped and been
+/// lowercased by the caller.
+const PO_BOX_PREFIXES: &[&[&str]] = &[
+    &["po", "box"],
+    &["p", "o", "box"],
+    &["post", "office", "box"],
+    &["pob"],
+    &["box"],
+];
+
+/// Recognizes a street line that names a PO box rather than a street
+/// address, in any of the ways people write it ("PO Box 123", "P.O. Box
+/// 123", "P O Box 123", "Post Office Box 123", "POB 123", "Box 123"), and
+/// returns it in the canonical "PO Box <number>" form. Returns `None` for
+/// anything that isn't a PO box line, including a bare "PO Box" with no
+/// number after it.
+fn normalize_po_box(street: &str) -> Option<String> {
+    let raw_tokens: Vec<&str> = street.split_whitespace().collect();
+    let normalized_tokens: Vec<String> = raw_tokens
+        .iter()
+        .map(|t| t.replace('.', "").to_lowercase())
+        .collect();
+
+    for prefix in PO_BOX_PREFIXES {
+        if normalized_tokens.len() <= prefix.len() {
+            continue;
+        }
+        let matches = normalized_tokens
+            .iter()
+            .zip(prefix.iter())
+            .all(|(tok, want)| tok.as_str() == *want);
+        if matches {
+            let box_id = raw_tokens[prefix.len()..].join(" ");
+            return Some(format!("PO Box {box_id}"));
+        }
+    }
+    None
+}
+
+/// True if `street` is a street line naming a PO box, whether or not it's
+/// already in canonical form.
+pub fn is_po_box(street: &str) -> bool {
+    normalize_po_box(street).is_some()
 }
 
 /// Splits `"City, ST ZIP"` into its three parts, validating state and zip.
@@ -382,5 +435,46 @@ mod tests {
         let line = format_address_single_line(&addr);
         assert_eq!(line, "123 Main St Apt 4B, Springfield, IL 62704");
         assert_eq!(parse_address(&line).unwrap(), addr);
+    }
+
+    #[test]
+    fn recognizes_po_box_street_line() {
+        let addr = parse_address("PO Box 123\nSpringfield, IL 62704").unwrap();
+        assert_eq!(addr.street, "PO Box 123");
+        assert_eq!(addr.unit, None);
+        assert!(is_po_box(&addr.street));
+    }
+
+    #[test]
+    fn normalizes_po_box_spelling_variants() {
+        let variants = [
+            "P.O. Box 123",
+            "P O Box 123",
+            "Post Office Box 123",
+            "POB 123",
+            "Box 123",
+        ];
+        for variant in variants {
+            let addr = parse_address(&format!("{variant}\nSpringfield, IL 62704")).unwrap();
+            assert_eq!(addr.street, "PO Box 123", "input was {variant}");
+        }
+    }
+
+    #[test]
+    fn recognizes_po_box_on_single_comma_line() {
+        let addr = parse_address("PO Box 123, Springfield, IL 62704").unwrap();
+        assert_eq!(addr.street, "PO Box 123");
+    }
+
+    #[test]
+    fn po_box_round_trips_through_format() {
+        let addr = parse_address("PO Box 123\nSpringfield, IL 62704").unwrap();
+        assert_eq!(format_address(&addr), "PO Box 123\nSpringfield, IL 62704");
+    }
+
+    #[test]
+    fn bare_po_box_with_no_number_is_not_a_po_box() {
+        assert!(!is_po_box("PO Box"));
+        assert!(!is_po_box("123 Main St"));
     }
 }
